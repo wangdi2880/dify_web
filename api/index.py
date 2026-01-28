@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes.dify_routes import router as dify_router
 
 app = FastAPI()
+# Reload trigger
+app.include_router(dify_router)
 
 # 允许跨域
 app.add_middleware(
@@ -15,7 +18,3 @@ app.add_middleware(
 @app.get("/api/hello")
 def read_root():
     return {"message": "Hello from Dockerized FastAPI!"}
-
-@app.get("/api/items/{item_id}")
-def read_item(item_id: int):
-    return {"item_id": item_id, "name": "Test Item"}
