@@ -69,7 +69,7 @@ class DifyService:
                             var_name, real_filename = "file", full_filename
                             
                         content = f_data.get("content")
-                        file_id, mime_type, err = self.upload_file_sync(real_filename, content, config, user)
+                        file_id, mime_type, err = await self.upload_file(real_filename, content, config, user)
                         
                         if err:
                             logger.error(f"文件上传失败 ({real_filename}): {err}")
@@ -145,29 +145,6 @@ class DifyService:
             logger.error(f"run_workflow 发生异常: {str(e)}", exc_info=True)
             yield json.dumps({"error": f"执行异常: {str(e)}"}) + "\n"
 
-    def upload_file_sync(self, filename: str, content: bytes, config: Dict[str, Any], user: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-        """上传文件到 Dify (同步包装，因为是在 AsyncGenerator 中调用，避免上下文混乱)"""
-        import requests
-        base_url = config.get("url", "").split("/v1/")[0]
-        upload_url = f"{base_url}/v1/files/upload"
-        
-        headers = {k: v for k, v in config.get("headers", {}).items() if k.lower() != "content-type"}
-        auth = headers.get("Authorization", "").strip()
-        if auth and not auth.startswith("Bearer "):
-            headers["Authorization"] = f"Bearer {auth}"
-        
-        try:
-            mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-            files = { 'file': (filename, content, mime_type) }
-            data = { 'user': user }
-            
-            resp = requests.post(upload_url, headers=headers, files=files, data=data, timeout=60)
-            if resp.status_code in [200, 201]:
-                res = resp.json()
-                return res.get("id"), res.get("mime_type", mime_type), None
-            return None, None, f"Status {resp.status_code}: {resp.text}"
-        except Exception as e:
-            return None, None, str(e)
 
     async def get_parameters(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """获取 Dify 应用参数"""
