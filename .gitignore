@@ -6,3 +6,4 @@ venv
 dist
 .env
 api/files
+.claude

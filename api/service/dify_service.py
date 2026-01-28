@@ -1,4 +1,4 @@
-import json
+﻿import json
 import aiohttp
 import mimetypes
 import logging
@@ -14,7 +14,7 @@ class DifyService:
             return "image"
         return "document"
 
-    async def upload_file(self, file: UploadFile, config: Dict[str, Any], user: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    async def upload_file(self, filename: str, content: bytes, config: Dict[str, Any], user: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """上传文件到 Dify"""
         base_url = config.get("url", "").split("/v1/")[0]
         upload_url = f"{base_url}/v1/files/upload"
@@ -25,11 +25,10 @@ class DifyService:
             headers["Authorization"] = f"Bearer {headers['Authorization'].strip()}"
         
         try:
-            content = await file.read()
-            mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+            mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
             
             form_data = aiohttp.FormData()
-            form_data.add_field('file', content, filename=file.filename, content_type=mime_type)
+            form_data.add_field('file', content, filename=filename, content_type=mime_type)
             form_data.add_field('user', user)
 
             timeout = aiohttp.ClientTimeout(total=config.get("timeout", 60))
@@ -46,84 +45,147 @@ class DifyService:
                         return None, None, f"Status {response.status}: {error_text}"
         except Exception as e:
             return None, None, str(e)
-        finally:
-            await file.seek(0)
 
-    async def run_workflow(self, config: Dict[str, Any], inputs: Dict[str, Any], files: List[UploadFile] = None, user: str = "api-user") -> AsyncGenerator[str, None]:
+    async def run_workflow(self, config: Dict[str, Any], inputs: Dict[str, Any], files: List[Dict[str, Any]] = None, user: str = "api-user") -> AsyncGenerator[str, None]:
         """执行工作流 (流式)"""
-        run_url = config.get("url")
-        headers = config.get("headers", {}).copy()
-        if "Authorization" in headers and not headers["Authorization"].strip().startswith("Bearer "):
-            headers["Authorization"] = f"Bearer {headers['Authorization'].strip()}"
-        headers["Content-Type"] = "application/json"
-        
-        # 1. 处理文件上传
-        uploaded_files_info = []
-        if files:
-            yield json.dumps({"event": "sys_log", "message": "正在上传文件..."}) + "\n"
-            for file in files:
-                file_id, mime_type, err = await self.upload_file(file, config, user)
-                if err:
-                    yield json.dumps({"error": f"上传失败: {err}"})
-                    return
-                
-                uploaded_files_info.append({
-                    "type": self._get_file_type_from_mime(mime_type),
-                    "transfer_method": "local_file",
-                    "upload_file_id": file_id
-                })
-            yield json.dumps({"event": "sys_log", "message": "文件上传完成，开始执行工作流..."}) + "\n"
-
-        # 2. 构造参数
-        final_inputs = inputs.copy()
-        # 兼容性处理：如果有文件，尝试注入到 inputs
-        if uploaded_files_info:
-            # 如果是单个文件，且inputs为空，或者按照你样例代码的习惯
-            if "files" not in final_inputs:
-                final_inputs["files"] = uploaded_files_info # 通用
-            # 如果你的工作流特定使用 base_input 接收文件
-            # final_inputs["base_input"] = uploaded_files_info[0] 
-
-        payload = {
-            "inputs": final_inputs,
-            "response_mode": "streaming" if config.get("stream") else "blocking",
-            "user": user
-        }
-
-        # 3. 发送请求
         try:
+            run_url = config.get("url")
+            headers = config.get("headers", {}).copy()
+            if "Authorization" in headers and not headers["Authorization"].strip().startswith("Bearer "):
+                headers["Authorization"] = f"Bearer {headers['Authorization'].strip()}"
+            headers["Content-Type"] = "application/json"
+            
+            # 1. 处理文件上传并映射到变量
+            final_inputs = inputs.copy()
+            
+            if files:
+                yield json.dumps({"event": "sys_log", "message": "正在上传文件..."}) + "\n"
+                for f_data in files:
+                    try:
+                        full_filename = f_data.get("filename", "")
+                        if "#" in full_filename:
+                            var_name, real_filename = full_filename.split("#", 1)
+                        else:
+                            var_name, real_filename = "file", full_filename
+                            
+                        content = f_data.get("content")
+                        file_id, mime_type, err = self.upload_file_sync(real_filename, content, config, user)
+                        
+                        if err:
+                            logger.error(f"文件上传失败 ({real_filename}): {err}")
+                            yield json.dumps({"error": f"上传失败: {err}"}) + "\n"
+                            return
+                        
+                        file_info = {
+                            "type": self._get_file_type_from_mime(mime_type),
+                            "transfer_method": "local_file",
+                            "upload_file_id": file_id
+                        }
+                        
+                        # 核心逻辑：如果是单文件，直接传对象；如果是多文件，Dify文档通常也是传数组
+                        # 这里修复 "pdf in input form must be a file" 报错，尝试直接传对象而非数组
+                        final_inputs[var_name] = file_info
+                        
+                    except Exception as fe:
+                        logger.error(f"文件处理异常: {str(fe)}", exc_info=True)
+                        yield json.dumps({"error": f"单个文件处理异常: {str(fe)}"}) + "\n"
+                        return
+
+                yield json.dumps({"event": "sys_log", "message": "文件上传完成，开始执行..."}) + "\n"
+
+            # 2. 构造最终 Payload
+            # 工作流 API 应当只使用 inputs 来传递文件变量，移除根目录的 files 已防冲突
+            payload = {
+                "inputs": final_inputs,
+                "response_mode": "streaming" if config.get("stream") else "blocking",
+                "user": user
+            }
+            logger.info(f"发送至 Dify Payload: {json.dumps(payload, ensure_ascii=False)}")
+
+            # 3. 发送请求
             timeout = aiohttp.ClientTimeout(total=config.get("timeout", 120))
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(run_url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         err = await response.text()
-                        yield json.dumps({"error": f"API Error {response.status}: {err}"})
+                        yield json.dumps({"error": f"API Error {response.status}: {err}"}) + "\n"
                         return
 
-                    async for line in response.content:
-                        line_str = line.decode('utf-8').strip()
-                        if not line_str or line_str.startswith("event: ping"): continue
+                    # 根据是否为流式模式处理
+                    if config.get("stream"):
+                        async for line in response.content:
+                            line_str = line.decode('utf-8').strip()
+                            if not line_str or line_str.startswith("event: ping"): continue
+                            
+                            if line_str.startswith("data: "):
+                                try:
+                                    data = json.loads(line_str[6:])
+                                    event = data.get("event")
+                                    if event == "text_chunk":
+                                        yield data.get("data", {}).get("text", "")
+                                    elif event == "workflow_finished":
+                                        pass
+                                    elif event == "error":
+                                        yield f"\n[Error: {data.get('message')}]"
+                                except: pass
+                    else:
+                        # 阻塞模式：直接读取完整结果
+                        full_resp = await response.json()
+                        # 对于工作流，结果通常在 data.outputs 中
+                        # 对于聊天，结果在 data.answer 中
+                        data = full_resp.get("data", {}) if "data" in full_resp else full_resp
+                        result = data.get("outputs") or data.get("answer") or str(full_resp)
                         
-                        if line_str.startswith("data: "):
-                            try:
-                                data = json.loads(line_str[6:])
-                                event = data.get("event")
-                                if event == "text_chunk":
-                                    yield data.get("data", {}).get("text", "")
-                                elif event == "workflow_finished":
-                                    pass
-                                elif event == "error":
-                                    yield f"\n[Error: {data.get('message')}]"
-                            except: pass
+                        if isinstance(result, dict):
+                            yield json.dumps(result, ensure_ascii=False, indent=2) + "\n"
                         else:
-                            # 处理非流式返回 (Blocking)
-                            try:
-                                full = json.loads(line_str)
-                                # 尝试获取 answer 或 outputs
-                                res = full.get("data", {}).get("answer") or full.get("data", {}).get("outputs") or str(full)
-                                yield str(res)
-                            except: pass
+                            yield str(result) + "\n"
+                            
         except Exception as e:
-            yield json.dumps({"error": str(e)})
+            logger.error(f"run_workflow 发生异常: {str(e)}", exc_info=True)
+            yield json.dumps({"error": f"执行异常: {str(e)}"}) + "\n"
+
+    def upload_file_sync(self, filename: str, content: bytes, config: Dict[str, Any], user: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """上传文件到 Dify (同步包装，因为是在 AsyncGenerator 中调用，避免上下文混乱)"""
+        import requests
+        base_url = config.get("url", "").split("/v1/")[0]
+        upload_url = f"{base_url}/v1/files/upload"
+        
+        headers = {k: v for k, v in config.get("headers", {}).items() if k.lower() != "content-type"}
+        auth = headers.get("Authorization", "").strip()
+        if auth and not auth.startswith("Bearer "):
+            headers["Authorization"] = f"Bearer {auth}"
+        
+        try:
+            mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            files = { 'file': (filename, content, mime_type) }
+            data = { 'user': user }
+            
+            resp = requests.post(upload_url, headers=headers, files=files, data=data, timeout=60)
+            if resp.status_code in [200, 201]:
+                res = resp.json()
+                return res.get("id"), res.get("mime_type", mime_type), None
+            return None, None, f"Status {resp.status_code}: {resp.text}"
+        except Exception as e:
+            return None, None, str(e)
+
+    async def get_parameters(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """获取 Dify 应用参数"""
+        base_url = config.get("url", "").split("/v1/")[0]
+        url = f"{base_url}/v1/parameters"
+        
+        headers = config.get("headers", {}).copy()
+        auth = headers.get("Authorization", "").strip()
+        if auth and not auth.startswith("Bearer "):
+            headers["Authorization"] = f"Bearer {auth}"
+        
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    text = await response.text()
+                    raise Exception(f"Dify Error {response.status}: {text}")
+                return await response.json()
 
 dify_service = DifyService()
+

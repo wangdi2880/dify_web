@@ -50,6 +50,19 @@ class DifyConfig(BaseModel):
 def get_configs():
     return read_json(CONFIG_FILE)
 
+@router.get("/parameters")
+async def get_parameters(config_id: str):
+    configs = read_json(CONFIG_FILE)
+    config = next((c for c in configs if c['id'] == config_id), None)
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    
+    try:
+        data = await dify_service.get_parameters(config)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/configs")
 def save_config(config: DifyConfig):
     configs = read_json(CONFIG_FILE)
@@ -105,11 +118,21 @@ async def run_workflow(
     history.insert(0, new_entry)
     write_json(HISTORY_FILE, history)
 
+    # 预读取文件内容，防止 StreamingResponse 导致文件关闭
+    pre_read_files = []
+    if files:
+        for f in files:
+            content = await f.read()
+            pre_read_files.append({
+                "filename": f.filename,
+                "content": content
+            })
+
     return StreamingResponse(
         dify_service.run_workflow(
             config=config,
             inputs=inputs,
-            files=files or [],
+            files=pre_read_files,
             user=inputs.get("user", "web-user")
         ),
         media_type="text/event-stream"

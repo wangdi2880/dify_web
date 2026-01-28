@@ -15,6 +15,6 @@
 </template>
 
 <style scoped>
-.home-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #f5f7fa; }
+.home-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; background-color: #f5f7fa; }
 .actions { display: flex; gap: 20px; margin-top: 30px; }
 </style>
