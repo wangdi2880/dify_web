@@ -1,7 +1,7 @@
 {
   "name": "vercel-monorepo",
-  "private": true,
   "scripts": {
-    "build": "cd frontend && npm install && npm run build"
+    "install-frontend": "cd frontend && npm install",
+    "build-frontend": "cd frontend && npm run build"
   }
 }
