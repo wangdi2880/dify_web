@@ -1,5 +1,11 @@
+import os
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Ensure the 'api' directory is in the path for Vercel
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from routes.dify_routes import router as dify_router
 
 app = FastAPI()
