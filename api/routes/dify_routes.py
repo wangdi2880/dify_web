@@ -9,16 +9,25 @@ from service.dify_service import dify_service
 router = APIRouter(prefix="/api/dify", tags=["Dify"])
 
 # 文件路径配置
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FILES_DIR = os.path.join(BASE_DIR, "files")
+# Vercel 环境下只有 /tmp 目录可写
+if os.environ.get("VERCEL"):
+    FILES_DIR = "/tmp/files"
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    FILES_DIR = os.path.join(BASE_DIR, "files")
+
 CONFIG_FILE = os.path.join(FILES_DIR, "dify_configs.json")
 HISTORY_FILE = os.path.join(FILES_DIR, "dify_history.json")
 
 # 初始化文件
-os.makedirs(FILES_DIR, exist_ok=True)
-for f_path in [CONFIG_FILE, HISTORY_FILE]:
-    if not os.path.exists(f_path):
-        with open(f_path, 'w') as f: json.dump([], f)
+try:
+    os.makedirs(FILES_DIR, exist_ok=True)
+    for f_path in [CONFIG_FILE, HISTORY_FILE]:
+        if not os.path.exists(f_path):
+            with open(f_path, 'w', encoding='utf-8') as f: 
+                json.dump([], f)
+except Exception as e:
+    print(f"Warning: Could not initialize files: {e}")
 
 def read_json(path):
     with open(path, 'r', encoding='utf-8') as f: return json.load(f)
