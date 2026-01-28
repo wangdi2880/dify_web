@@ -1,7 +1,6 @@
 {
-  "name": "vercel-monorepo",
+  "name": "dify-web",
   "scripts": {
-    "install-frontend": "cd frontend && npm install",
-    "build-frontend": "cd frontend && npm run build"
+    "build": "cd frontend && npm install && npm run build"
   }
 }
