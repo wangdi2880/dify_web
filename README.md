@@ -34,3 +34,14 @@
 	cd frontend
 	npm install
 	npm run dev
+
+
+# Vercel部署配置项详情
+
+| 配置项              | 内容                                  | Override状态 | 用途说明                                                                 |
+|---------------------|---------------------------------------|--------------|--------------------------------------------------------------------------|
+| Framework Preset    | Other                                 | -            | 指定项目使用的框架预设，自动适配对应配置；“Other”代表非预设的其他框架    |
+| Build Command       | cd frontend && npm install && npm run build | 开启         | 项目构建阶段执行的命令，用于进入前端目录、安装依赖并构建生产环境代码     |
+| Output Directory    | frontend/dist                       | 开启         | 构建完成后，编译产物的存放目录，部署服务会读取该目录下的文件             |
+| Install Command     | echo "Skip Root Install"            | 开启         | 项目初始化时执行的安装命令，此处为跳过根目录的依赖安装操作               |
+| Development Command | None                                  | 关闭         | 开发环境下启动项目的命令，当前未配置该命令                               |
