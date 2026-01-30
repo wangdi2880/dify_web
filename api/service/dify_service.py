@@ -2,6 +2,7 @@
 import aiohttp
 import mimetypes
 import logging
+import io
 from typing import Optional, Tuple, AsyncGenerator, Dict, Any, List
 from fastapi import UploadFile
 
@@ -28,7 +29,7 @@ class DifyService:
             mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
             
             form_data = aiohttp.FormData()
-            form_data.add_field('file', content, filename=filename, content_type=mime_type)
+            form_data.add_field('file', io.BytesIO(content), filename=filename, content_type=mime_type)
             form_data.add_field('user', user)
 
             timeout = aiohttp.ClientTimeout(total=config.get("timeout", 60))
@@ -59,7 +60,6 @@ class DifyService:
             final_inputs = inputs.copy()
             
             if files:
-                yield json.dumps({"event": "sys_log", "message": "正在上传文件..."}) + "\n"
                 for f_data in files:
                     try:
                         full_filename = f_data.get("filename", "")
@@ -90,8 +90,6 @@ class DifyService:
                         logger.error(f"文件处理异常: {str(fe)}", exc_info=True)
                         yield json.dumps({"error": f"单个文件处理异常: {str(fe)}"}) + "\n"
                         return
-
-                yield json.dumps({"event": "sys_log", "message": "文件上传完成，开始执行..."}) + "\n"
 
             # 2. 构造最终 Payload
             # 工作流 API 应当只使用 inputs 来传递文件变量，移除根目录的 files 已防冲突
@@ -124,7 +122,7 @@ class DifyService:
                                     if event == "text_chunk":
                                         yield data.get("data", {}).get("text", "")
                                     elif event == "workflow_finished":
-                                        pass
+                                        yield json.dumps(data, ensure_ascii=False) + "\n"
                                     elif event == "error":
                                         yield f"\n[Error: {data.get('message')}]"
                                 except: pass

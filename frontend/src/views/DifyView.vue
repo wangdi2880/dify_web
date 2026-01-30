@@ -7,115 +7,71 @@
       </div>
     </el-header>
 
-    <el-main>
-      <el-tabs v-model="activeTab" type="border-card">
-        
-        <el-tab-pane label="API 配置" name="config">
-          <el-row :gutter="20" class="tab-content-row">
-            <el-col :span="6" class="h-100">
-              <div class="list-header">
-                <span>配置列表</span>
-                <el-button type="primary" link icon="Plus" @click="initNewConfig">新增</el-button>
-              </div>
-              <el-scrollbar class="list-scroll" :class="{ 'has-content': configList.length > 0 }">
-                <div v-for="item in configList" :key="item.id" 
-                     class="list-item" :class="{active: currentConfig.id === item.id}"
-                     @click="selectConfig(item)">
-                  <span class="name">{{ item.name }}</span>
-                  <el-button type="danger" link icon="Delete" @click.stop="deleteConfig(item.id)" />
-                </div>
-              </el-scrollbar>
-            </el-col>
-            
-            <el-col :span="18" class="h-100">
-              <el-card shadow="never" class="h-100" v-if="currentConfig.id">
-                <template #header>
-                  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <span style="font-weight: bold;">{{ currentConfig.name || '未命名配置' }}</span>
-                    <el-button type="primary" icon="" @click="saveConfig">保存配置</el-button>
-                  </div>
-                </template>
-                <el-form label-width="120px" :model="currentConfig">
-                  <el-form-item label="配置名称">
-                    <el-input v-model="currentConfig.name" placeholder="例如: 文本摘要工作流" />
-                  </el-form-item>
-                  <el-form-item label="服务类型">
-                    <el-select v-model="currentConfig.service_type" disabled><el-option value="dify" label="Dify" /></el-select>
-                  </el-form-item>
-                  <el-form-item label="API URL">
-                    <el-input v-model="currentConfig.url" placeholder="http://.../v1/workflows/run" />
-                  </el-form-item>
-                  <el-form-item label="API KEY">
-                    <el-input v-model="currentConfig.headers['Authorization']" placeholder="app-xxxx..." />
-                  </el-form-item>
-                  
-                  <el-divider content-position="left">其他 Headers</el-divider>
-                  <div v-for="(val, key) in currentConfig.headers" :key="key" class="kv-row">
-                    <template v-if="key !== 'Authorization' && key !== 'Content-Type'">
-                       <el-input :model-value="key" @input="v => updateHeaderKey(key, v)" placeholder="Key" style="width: 30%;" />
-                       <span class="mx-2">:</span>
-                       <el-input v-model="currentConfig.headers[key]" placeholder="Value" style="width: 50%;" />
-                       <el-button icon="Delete" link type="danger" @click="delete currentConfig.headers[key]" />
-                    </template>
-                  </div>
-                  <el-button size="small" icon="Plus" @click="addHeader">添加 Header</el-button>
-
-                  <el-divider />
-                  <el-row>
-                    <el-col :span="12">
-                      <el-form-item label="超时时间(s)">
-                        <el-input-number v-model="currentConfig.timeout" :min="10" />
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                      <el-form-item label="流式响应">
-                        <el-switch v-model="currentConfig.stream" />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
-                </el-form>
-              </el-card>
-            </el-col>
-          </el-row>
-        </el-tab-pane>
-
-        <el-tab-pane label="API 调用" name="run">
-          <el-row :gutter="20" class="tab-content-row">
-            <el-col :span="6" class="h-100">
-               <el-card shadow="never" class="h-100">
-                 <div slot="header" class="mb-10"><b>选择服务调用</b></div>
-                 <el-scrollbar class="list-scroll" :class="{ 'has-content': historyOrConfigList.length > 0 }">
-                   <div v-for="h in historyOrConfigList" :key="h.id || h.config_id" 
-                        class="list-item" @click="loadRunConfig(h)">
-                     <div class="name">{{ h.name || h.config_name }}</div>
-                     <small v-if="h.timestamp" style="color:#999">上次调用: {{ h.timestamp }}</small>
-                   </div>
-                 </el-scrollbar>
-               </el-card>
-            </el-col>
-
-            <el-col :span="18" class="h-100 call-area">
-              <!-- Block 1: URL & Config Selector -->
+    <el-main class="dify-main">
+      <el-row :gutter="20" class="h-100">
+        <!-- Main Area: Config & Run -->
+        <el-col :span="24" class="h-100">
+          <el-card shadow="never" class="h-100 main-card" v-if="currentConfig.id">
+            <div class="scroll-container">
+              <!-- api config section -->
               <div class="compact-block config-block">
-                <div class="block-title">1. 配置与地址</div>
-                <div class="run-header">
-                  <el-select v-model="runState.configId" placeholder="选择激活配置" size="default" style="width: 300px" @change="onConfigChange">
-                    <el-option v-for="c in configList" :key="c.id" :label="c.name" :value="c.id" />
-                  </el-select>
-                  <el-button type="success" :loading="loading" icon="Promotion" @click="executeRun">发送请求 (Run)</el-button>
-                  <el-button type="primary" plain icon="Refresh" @click="fetchParameters" :disabled="!runState.configId">同步参数配置</el-button>
+                <div class="config-row">
+                  <span class="label-text">API URL:</span>
+                  <el-input v-model="currentConfig.url" placeholder="http://.../v1/workflows/run" style="flex: 1;" />
+                  <el-button type="success" :loading="loading" icon="Promotion" @click="executeRun" style="margin-left: 10px; width: 120px;">
+                    发送请求
+                  </el-button>
+                </div>
+
+                <div class="config-row mt-2">
+                   <span class="label-text">API KEY:</span>
+                   <el-input v-model="currentConfig.headers['Authorization']" placeholder="Bearer app-xxxx..." style="flex: 1;" />
+                </div>
+
+                <div class="config-row mt-2">
+                   <div class="flex-item">
+                      <span class="label-text">超时(s):</span>
+                      <el-input-number v-model="currentConfig.timeout" :min="10" size="default" style="width: 120px;" />
+                   </div>
+                   <div class="flex-item ml-4">
+                      <span class="label-text">流式响应:</span>
+                      <el-switch v-model="currentConfig.stream" />
+                   </div>
+                </div>
+
+                <div class="config-row mt-2 headers-row">
+                    <span class="label-text" style="align-self: flex-start; margin-top: 5px;">Headers:</span>
+                    <div class="headers-container">
+                      <div v-for="(val, key) in currentConfig.headers" :key="key" class="kv-row">
+                        <template v-if="key !== 'Authorization' && key !== 'Content-Type'">
+                           <el-input :model-value="key" @input="v => updateHeaderKey(key, v)" placeholder="Key" style="width: 30%;" size="small" />
+                           <span class="mx-2">:</span>
+                           <el-input v-model="currentConfig.headers[key]" placeholder="Value" style="width: 50%;" size="small" />
+                           <el-button icon="Delete" link type="danger" @click="delete currentConfig.headers[key]" />
+                        </template>
+                      </div>
+                      <el-button size="small" icon="Plus" link @click="addHeader">添加 Header</el-button>
+                    </div>
                 </div>
               </div>
 
-              <!-- Block 2: Request Parameters -->
-              <div class="compact-block params-block">
-                <div class="block-title">2. 请求参数 (Inputs)</div>
+              <!-- parameters section -->
+              <div class="run-section compact-block params-block">
+                <div class="block-header">
+                  <span class="block-title">请求参数 (Inputs)</span>
+                   <div class="flex-item ml-auto">
+                     <el-button type="primary" plain size="small" icon="Refresh" @click="fetchParameters">
+                        同步参数配置
+                      </el-button>
+                   </div>
+                </div>
+                
                 <div class="param-table-container">
                   <div class="param-thead">
-                    <div class="col-var">字段 Key (Variable)</div>
+                    <div class="col-var">字段 Key</div>
                     <div class="col-type">类型</div>
-                    <div class="col-ctrl">参数值/控件</div>
-                    <div class="col-desc">描述 (Label)</div>
+                    <div class="col-ctrl">值 / 控件</div>
+                    <div class="col-desc">描述</div>
                     <div class="col-action"></div>
                   </div>
                   <div class="param-tbody" :class="{ 'has-content': runState.dynamicParams.length > 0 }">
@@ -128,6 +84,8 @@
                           <el-option value="text-input" label="文字" />
                           <el-option value="number" label="数字" />
                           <el-option value="file" label="文件" />
+                          <el-option value="select" label="选择" />
+                          <el-option value="paragraph" label="段落" />
                         </el-select>
                       </div>
                       <div class="col-ctrl">
@@ -149,8 +107,8 @@
                         <el-button icon="Delete" link type="danger" @click="runState.dynamicParams.splice(index, 1)" />
                       </div>
                     </div>
-                    <div v-if="runState.dynamicParams.length === 0" class="empty-params">
-                      暂无参数项，请点击下方添加
+                     <div v-if="runState.dynamicParams.length === 0" class="empty-params">
+                      暂无参数项，请点击上方“同步参数配置”或手动添加
                     </div>
                   </div>
                   <div class="param-tfoot">
@@ -159,25 +117,27 @@
                 </div>
               </div>
 
-              <!-- Block 3: Result -->
-              <div class="compact-block result-block">
-                <div class="block-title">3. 返回结果</div>
-                <div class="result-tabs-wrapper">
-                  <el-tabs v-model="resultTab" class="full-height-tabs">
-                    <el-tab-pane label="Markdown 渲染" name="md">
-                      <div class="scroll-content result-container markdown-body" :class="{ 'has-content': runResult }" v-html="renderMarkdown(runResult)"></div>
-                    </el-tab-pane>
-                    <el-tab-pane label="Raw 原始数据" name="raw">
-                      <pre class="scroll-content result-container raw-box" :class="{ 'has-content': runResult }">{{ runResult }}</pre>
-                    </el-tab-pane>
-                  </el-tabs>
+              <!-- result section -->
+              <div class="result-section compact-block result-block">
+                <div class="block-header">
+                  <span class="block-title">返回结果</span>
+                  <el-radio-group v-model="resultTab" size="small">
+                    <el-radio-button value="raw">Raw</el-radio-button>
+                    <el-radio-button value="md">Markdown</el-radio-button>
+                    <el-radio-button value="json">JSON</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <div class="result-content-wrapper">
+                    <div v-if="resultTab === 'md'" class="scroll-content result-container markdown-body" :class="{ 'has-content': runResult }" v-html="renderMarkdown(runResult)"></div>
+                    <pre v-else-if="resultTab === 'json'" class="scroll-content result-container json-box" :class="{ 'has-content': runResult }">{{ renderJson(runResult) }}</pre>
+                    <pre v-else class="scroll-content result-container raw-box" :class="{ 'has-content': runResult }">{{ runResult }}</pre>
                 </div>
               </div>
-            </el-col>
-          </el-row>
-        </el-tab-pane>
 
-      </el-tabs>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
     </el-main>
   </div>
 </template>
@@ -187,49 +147,26 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { marked } from 'marked'
 import { ElMessage } from 'element-plus'
+import JSON5 from 'json5'
 
 // --- State ---
-const activeTab = ref('run')
-const configList = ref([])
-const historyList = ref([])
 const currentConfig = ref({})
 const loading = ref(false)
-const resultTab = ref('md')
-const runResult = ref('')
+const resultTab = ref('raw')
+const runResult = ref('') // Accumulates text/markdown result
 
 const runState = reactive({
-  configId: '',
   dynamicParams: [], // { variable, type, value, required, options, fileInfo }
 })
 
-// --- Computed ---
-// 混合展示：优先展示历史记录，没有历史记录展示纯配置
-const historyOrConfigList = computed(() => {
-  return historyList.value.length ? historyList.value : configList.value
-})
-
-// --- Lifecycle ---
-onMounted(async () => {
-  await fetchConfigs()
-  await fetchHistory()
+onMounted(() => {
   initNewConfig()
 })
-
-// --- API Config Methods ---
-const fetchConfigs = async () => {
-  const res = await axios.get('/api/dify/configs')
-  configList.value = res.data
-}
-
-const fetchHistory = async () => {
-  const res = await axios.get('/api/dify/history')
-  historyList.value = res.data
-}
 
 const initNewConfig = () => {
   currentConfig.value = {
     id: Date.now().toString(),
-    name: 'New Dify Config',
+    name: 'NewDifyWorkflow',
     service_type: 'dify',
     method: 'POST',
     url: 'https://api.dify.ai/v1/workflows/run',
@@ -237,22 +174,16 @@ const initNewConfig = () => {
     timeout: 60,
     stream: false
   }
+  runState.dynamicParams = []
+  runResult.value = ''
 }
 
-const selectConfig = (item) => {
+const selectConfig = async (item) => {
+  // 深拷贝
   currentConfig.value = JSON.parse(JSON.stringify(item))
-}
-
-const saveConfig = async () => {
-  await axios.post('/api/dify/configs', currentConfig.value)
-  ElMessage.success('保存成功')
-  fetchConfigs()
-}
-
-const deleteConfig = async (id) => {
-  await axios.delete(`/api/dify/configs/${id}`)
-  fetchConfigs()
-  initNewConfig()
+  runResult.value = ''
+  // 尝试自动同步参数
+  await fetchParameters()
 }
 
 const updateHeaderKey = (oldKey, newKey) => {
@@ -265,60 +196,49 @@ const addHeader = () => {
 }
 
 // --- Run Methods ---
-const onConfigChange = async (val) => {
-  await fetchParameters()
-}
-
 const fetchParameters = async () => {
-  if (!runState.configId) return
+  if (!currentConfig.value.url) {
+     ElMessage.warning('请先填写 API URL')
+     return
+  }
 
   try {
-    // 调用后端代理接口，由后端负责拼接 Bearer
-    const res = await axios.get(`/api/dify/parameters?config_id=${runState.configId}`)
+    // 调用后端代理接口
+    const res = await axios.post(`/api/dify/parameters`, currentConfig.value)
 
     const form = res.data.user_input_form || []
     const newParams = form.map(item => {
       const type = Object.keys(item)[0]
       const details = item[type]
+      let initialValue = details.default;
+      if (initialValue === undefined || initialValue === null) {
+          if (type === 'number') initialValue = undefined; 
+          else initialValue = '';
+      }
+      
       return {
         variable: details.variable,
         label: details.label,
-        type: type, // text-input, number, select, file, paragraph
+        type: type, 
         required: details.required,
         options: details.options || [],
-        value: details.default || '',
+        value: initialValue,
         fileInfo: null,
         isManual: false
       }
     })
 
-    // 如果当前有历史数据或正在编辑的数据，尝试合并
+    // 保留已输入的值
     const oldParams = [...runState.dynamicParams]
     runState.dynamicParams = newParams.map(p => {
       const matched = oldParams.find(old => old.variable === p.variable)
       if (matched) p.value = matched.value
       return p
     })
+    
+    ElMessage.success('参数已同步')
   } catch (e) {
-    ElMessage.error('获取应用参数失败: ' + e.message)
-  }
-}
-
-const loadRunConfig = async (item) => {
-  if (item.config_id) {
-    runState.configId = item.config_id
-    await fetchParameters()
-    // 填充历史值
-    if (item.params_json) {
-       runState.dynamicParams.forEach(p => {
-         if (item.params_json[p.variable] !== undefined) {
-           p.value = item.params_json[p.variable]
-         }
-       })
-    }
-  } else {
-    runState.configId = item.id
-    await fetchParameters()
+    ElMessage.error('同步参数失败: ' + (e.response?.data?.detail || e.message))
   }
 }
 
@@ -340,12 +260,14 @@ const addManualParam = () => {
 }
 
 const executeRun = async () => {
-  if (!runState.configId) return ElMessage.error('请选择配置')
+  if (!currentConfig.value.url) {
+     ElMessage.warning('请先填写 API URL')
+     return
+  }
   
   loading.value = true
-  runResult.value = '' // 清空旧结果
+  runResult.value = ''
   
-  // 1. 组装参数
   const finalParams = {}
   const filesToUpload = []
   
@@ -360,22 +282,18 @@ const executeRun = async () => {
     }
   })
 
-  // 2. 构造 FormData
   const fd = new FormData()
-  fd.append('config_id', runState.configId)
+  fd.append('config_json', JSON.stringify(currentConfig.value))
   fd.append('params_json', JSON.stringify(finalParams))
   
   if (filesToUpload.length > 0) {
     filesToUpload.forEach(f => {
-      // 为了让后端知道哪个文件对应哪个变量，我们将变量名编码进文件名中
-      // 格式：variableName#originalFileName
       const blob = f.file.slice(0, f.file.size, f.file.type)
       const renamedFile = new File([blob], `${f.variable}#${f.file.name}`, { type: f.file.type })
       fd.append('files', renamedFile) 
     })
   }
 
-  // 3. 发送请求 (使用 fetch 处理流)
   try {
     const response = await fetch('/api/dify/run', {
       method: 'POST',
@@ -392,46 +310,84 @@ const executeRun = async () => {
       const { done, value } = await reader.read()
       if (done) break
       
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
+      const chunk = decoder.decode(value, { stream: true })
+      buffer += chunk
       
-      // 最后一项可能是不完整的，留给下一块
+      const lines = buffer.split('\n')
+      // Store incomplete line in buffer
       buffer = lines.pop()
       
       for (const line of lines) {
         if (!line.trim()) continue
         
+        // Parse SSE data
+        let jsonStr = line
+        if (line.startsWith('data: ')) {
+          jsonStr = line.substring(6)
+        }
+        
         try {
-          const data = JSON.parse(line)
-          if (data.event === 'sys_log') {
-            console.log('Dify System Log:', data.message)
-            // 你也可以在这里用 ElMessage 显示中间状态
-            continue
+          const data = JSON.parse(jsonStr)
+          
+          if (data.event === 'sys_log' || data.event === 'ping') {
+             continue
           }
           if (data.error) {
-            runResult.value += `\n[系统错误]: ${data.error}`
+            runResult.value += `\n[Error]: ${data.error}`
             continue
           }
+          
+          // Handle various Dify events
+          if (data.event === 'message' || data.event === 'text_chunk') {
+             // Chat / Agent output
+             const text = data.answer || data.text || ''
+             runResult.value += text
+          } else if (data.event === 'workflow_finished') {
+             // Workflow output
+             if (data.data && data.data.outputs) {
+                const outputs = data.data.outputs
+                if (typeof outputs === 'string') {
+                    runResult.value += outputs
+                } else {
+                    runResult.value = JSON.stringify(outputs, null, 2)
+                }
+             }
+          } else if (!data.event) {
+             // 假如没有 event 字段，说明是直接返回的结果对象 (Blocking Mode)
+             if (typeof data === 'string') {
+                runResult.value += data
+             } else {
+                runResult.value = JSON.stringify(data, null, 2)
+             }
+          }
+
         } catch (e) {
-          // 不是 JSON 或者是 Dify 的文本块，直接追加
-          runResult.value += line + '\n'
+           // Not a JSON line, assume raw text
+           runResult.value += line + '\n'
         }
       }
     }
     
-    // 处理最后剩余的 buffer
     if (buffer.trim()) {
-      try {
-        const data = JSON.parse(buffer)
-        if (!data.error && data.event !== 'sys_log') {
-           runResult.value += buffer
-        }
-      } catch (e) {
-        runResult.value += buffer
-      }
+       // Try parse last chunk
+       let jsonStr = buffer
+       if (buffer.startsWith('data: ')) jsonStr = buffer.substring(6)
+       try {
+          const data = JSON.parse(jsonStr)
+          if (data.event === 'workflow_finished' && data.data?.outputs) {
+              const outputs = data.data.outputs
+              if (typeof outputs === 'string') runResult.value += outputs
+              else runResult.value = JSON.stringify(outputs, null, 2)
+          } else if (!data.event) {
+              // Handle non-event JSON at end (Blocking mode fallback)
+              if (typeof data === 'string') runResult.value += data
+              else runResult.value = JSON.stringify(data, null, 2)
+          }
+       } catch(e) {
+          runResult.value += buffer
+       }
     }
-    
-    fetchHistory() // 刷新历史
+
   } catch (e) {
     runResult.value = `请求失败: ${e.message}`
   } finally {
@@ -440,92 +396,90 @@ const executeRun = async () => {
 }
 
 const renderMarkdown = (text) => {
-  return marked(text || '')
+  return marked(text || '', { headerIds: false, mangle: false })
+}
+
+const renderJson = (text) => {
+  if (!text) return ''
+  try {
+    const trimmed = text.trim()
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+       const obj = JSON5.parse(trimmed)
+       return JSON5.stringify(obj, null, 2) 
+    }
+    return text
+  } catch (e) {
+    return text
+  }
 }
 </script>
 
 <style>
-/* 全局样式：确保页面无滚动条 */
-html, body {
-  height: 100%;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
-}
-
-#app {
-  height: 100%;
-  overflow: hidden;
-}
-</style>
-
-<style scoped>
-.dify-container { height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #f5f7fa; }
-.page-header { background: #fff; border-bottom: 1px solid #e6e6e6; height: 50px !important; display: flex; align-items: center; padding: 0 20px; flex-shrink: 0; }
+/* Global resets handled by main CSS or App.vue, ensure clean host here */
+.dify-container { height: 100vh; display: flex; flex-direction: column; background: #f5f7fa; }
+.page-header { background: #fff; border-bottom: 1px solid #dcdfe6; height: 50px !important; display: flex; align-items: center; padding: 0 20px; }
 .left { display: flex; align-items: center; gap: 12px; }
-.title { font-weight: 600; font-size: 16px; color: #303133; margin: 0; }
+.title { font-weight: 600; font-size: 16px; margin: 0; }
 
-.el-main { flex: 1; padding: 12px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-.el-tabs--border-card { border: none; box-shadow: none; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-:deep(.el-tabs__content) { flex: 1; overflow: hidden; padding: 12px; min-height: 0; }
-:deep(.el-tab-pane) { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.dify-main { padding: 16px; overflow: hidden; flex: 1; display: flex; flex-direction: column; }
+.main-card { display: flex; flex-direction: column; border-radius: 8px; }
+:deep(.main-card .el-card__body) { padding: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-.tab-content-row { height: 100%; display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
-:deep(.tab-content-row .el-row) { height: 100%; min-height: 0; overflow: hidden; }
-:deep(.tab-content-row .el-col) { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: hidden; }
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.header-left { display: flex; align-items: center; gap: 8px; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
 
-.h-100 { height: 100%; display: flex; flex-direction: column; min-height: 0; }
-:deep(.h-100 .el-card) { display: flex; flex-direction: column; height: 100%; }
-:deep(.h-100 .el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.scroll-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
 
-.list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: bold; font-size: 14px; flex-shrink: 0; }
-.list-scroll { flex: 1; min-height: 0; height: 100%; }
-:deep(.list-scroll .el-scrollbar__wrap) { overflow-x: hidden !important; }
-:deep(.list-scroll:not(.has-content) .el-scrollbar__bar.is-vertical) { display: none !important; }
-:deep(.list-scroll:not(.has-content) .el-scrollbar__bar.is-horizontal) { display: none !important; }
-.list-item { padding: 10px 12px; margin-bottom: 4px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid transparent; }
-.list-item:hover { background: #f0f2f5; }
-.list-item.active { background: #e6f7ff; color: #409eff; border-color: #bae7ff; }
+/* List Styles (Removed, keeping minimal if needed or clean up later) */
+.list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: bold; font-size: 14px; }
+.list-scroll { flex: 1; height: 100%; border-right: 1px solid #ebeef5; padding-right: 10px; }
+.list-item { padding: 10px 12px; margin-bottom: 4px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border: 1px solid transparent; transition: all 0.2s; }
+.list-item:hover { background: #e6f7ff; }
+.list-item.active { background: #1677ff; color: #fff; }
+.list-item.active .el-button { color: #fff; }
 
-.call-area { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; overflow: hidden; }
 
-.compact-block { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-.config-block { flex-shrink: 0; border-top: 2px solid #67c23a;}
-.params-block { border-top: 2px solid #67c23a; flex: 0 0 1; max-height: 45%; display: flex; flex-direction: column; }
-.result-block { border-top: 2px solid #67c23a; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Config Block Styles */
+.config-block { padding: 15px; background: #fff; border-left: 4px solid #409eff; }
+.config-row { display: flex; align-items: center; width: 100%; }
+.mt-2 { margin-top: 10px; }
+.ml-4 { margin-left: 20px; }
+.label-text { width: 80px; font-weight: 500; font-size: 13px; color: #606266; flex-shrink: 0; }
+.flex-item { display: flex; align-items: center; }
 
-.block-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 8px; padding-left: 2px; }
-.run-header { display: flex; gap: 8px; align-items: center; }
+.headers-row { align-items: flex-start; }
+.headers-container { flex: 1; display: flex; flex-direction: column; background: #f9f9f9; padding: 10px; border-radius: 4px; }
 
-/* Parameter Table Re-styled */
-.param-table-container { border: 1px solid #f0f0f0; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; flex: 1; }
-.param-thead { display: flex; background: #fafafa; padding: 8px 12px; font-weight: 600; color: #606266; font-size: 12px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
-.param-tbody { overflow-y: auto; flex: 1; min-height: 40px; }
-.param-row { display: flex; align-items: center; padding: 6px 10px; border-bottom: 1px solid #f5f5f5; }
-.param-tfoot { border-top: 1px solid #f0f0f0; padding: 4px 10px; }
-.empty-params { padding: 20px; text-align: center; color: #999; font-size: 12px; }
+/* Run Layout Blocks */
+.compact-block { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.params-block { border-top: 3px solid #67c23a; flex: 0 0 auto; max-height: 500px; display: flex; flex-direction: column; }
+.params-block .param-table-container { display: flex; flex-direction: column; height: 100%; }
+.result-block { border-top: 3px solid #409eff; flex: 1; min-height: 200px; display: flex; flex-direction: column; }
+
+.block-header { padding: 10px 15px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fafafa; }
+.block-title { font-weight: bold; font-size: 14px; color: #303133; }
+
+/* Param Table */
+.param-thead { display: flex; background: #f5f7fa; padding: 8px 10px; font-weight: 600; color: #606266; font-size: 12px; border-bottom: 1px solid #ebeef5; }
+.param-tbody { overflow-y: auto; padding: 0; max-height: 300px; }
+.param-row { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #ebeef5; gap: 10px; }
+.param-tfoot { padding: 10px; background: #f9f9f9; border-top: 1px solid #ebeef5; display: flex; align-items: center; }
 
 .col-var { width: 140px; flex-shrink: 0; }
-.col-type { width: 90px; flex-shrink: 0; margin: 0 8px; }
-.col-ctrl { flex: 1; min-width: 0; }
-.col-desc { width: 140px; flex-shrink: 0; margin-left: 8px; }
-.col-action { width: 30px; flex-shrink: 0; text-align: right; }
+.col-type { width: 100px; flex-shrink: 0; }
+.col-ctrl { flex: 1; min-width: 100px; }
+.col-desc { width: 150px; flex-shrink: 0; }
+.col-action { width: 30px; }
 
-.result-tabs-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: 5px; }
-.full-height-tabs { height: 100%; display: flex; flex-direction: column; }
-:deep(.full-height-tabs .el-tabs__content) { flex: 1; padding: 0 !important; min-height: 0; }
-:deep(.full-height-tabs .el-tab-pane) { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.empty-params { padding: 30px; text-align: center; color: #909399; font-size: 13px; }
 
-.scroll-content { height: 100%; overflow-y: auto; padding: 12px; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 4px; box-sizing: border-box; min-height: 0; }
-.raw-box { background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-all; }
-.markdown-body { background: #fff; font-size: 14px; }
-.markdown-body:empty::after { content: "暂无运行结果"; color: #999; display: flex; align-items: center; justify-content: center; height: 100%; font-size: 13px; }
-.raw-box { background: #1e1e1e; color: #d4d4d4; font-family: Consolas, monospace; font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-all; }
-.markdown-body { background: #fff; font-size: 14px; }
+/* Result Box */
+.result-content-wrapper { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.scroll-content { flex: 1; overflow-y: auto; padding: 15px; margin: 0; font-size: 14px; line-height: 1.6; }
+.raw-box { background: #282c34; color: #abb2bf; font-family: Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+.json-box { background: #fdf6e3; color: #333; font-family: Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+.markdown-body { background: #fff; }
 
-/* File upload */
-.dynamic-file-box { display: flex; align-items: center; gap: 8px; }
-.custom-file-upload { padding: 4px 10px; cursor: pointer; background: #f5f7fa; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 11px; }
-input[type="file"] { display: none; }
-.file-status { color: #409eff; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+.empty-selection { height: 100%; display: flex; align-items: center; justify-content: center; }
 </style>
